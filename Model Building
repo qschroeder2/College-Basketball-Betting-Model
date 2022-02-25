@@ -1,0 +1,1195 @@
+```{r - Libraries}
+library(dplyr)
+library(rvest)
+library(plyr)
+library(stringr)
+library(car)
+library(randomForest)
+library(caret)
+library(onewaytests)
+```
+
+```{r - Database Creation}
+# Year Input
+year_list <- c(2010:2022)
+
+#Basic
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years+1
+}
+
+NCAABasic = ldply(tbl, data.frame)
+
+NCAABasic = NCAABasic[-1,c(-1,-9,-12,-15,-18,-21,-22)]
+
+names(NCAABasic)[names(NCAABasic) == "Var.2"] <- "School"
+names(NCAABasic)[names(NCAABasic) == "Overall"] <- "G"
+names(NCAABasic)[names(NCAABasic) == "Overall.1"] <- "W"
+names(NCAABasic)[names(NCAABasic) == "Overall.2"] <- "L"
+names(NCAABasic)[names(NCAABasic) == "Overall.3"] <- "WinPer"
+names(NCAABasic)[names(NCAABasic) == "Overall.4"] <- "SRS"
+names(NCAABasic)[names(NCAABasic) == "Overall.5"] <- "SOS"
+names(NCAABasic)[names(NCAABasic) == "Conf."] <- "ConW"
+names(NCAABasic)[names(NCAABasic) == "Conf..1"] <- "ConL"
+names(NCAABasic)[names(NCAABasic) == "Home"] <- "HomeW"
+names(NCAABasic)[names(NCAABasic) == "Home.1"] <- "HomeL"
+names(NCAABasic)[names(NCAABasic) == "Away"] <- "AwayW"
+names(NCAABasic)[names(NCAABasic) == "Away.1"] <- "AwayL"
+names(NCAABasic)[names(NCAABasic) == "Points"] <- "TotPTS"
+names(NCAABasic)[names(NCAABasic) == "Points.1"] <- "OppPTS"
+names(NCAABasic)[names(NCAABasic) == "Totals"] <- "MP"
+names(NCAABasic)[names(NCAABasic) == "Totals.1"] <- "FG"
+names(NCAABasic)[names(NCAABasic) == "Totals.2"] <- "FGA"
+names(NCAABasic)[names(NCAABasic) == "Totals.3"] <- "FGPer"
+names(NCAABasic)[names(NCAABasic) == "Totals.4"] <- "X3P"
+names(NCAABasic)[names(NCAABasic) == "Totals.5"] <- "X3PA"
+names(NCAABasic)[names(NCAABasic) == "Totals.6"] <- "X3Per"
+names(NCAABasic)[names(NCAABasic) == "Totals.7"] <- "FT"
+names(NCAABasic)[names(NCAABasic) == "Totals.8"] <- "FTA"
+names(NCAABasic)[names(NCAABasic) == "Totals.9"] <- "FTPer"
+names(NCAABasic)[names(NCAABasic) == "Totals.10"] <- "ORB"
+names(NCAABasic)[names(NCAABasic) == "Totals.11"] <- "TRB"
+names(NCAABasic)[names(NCAABasic) == "Totals.12"] <- "AST"
+names(NCAABasic)[names(NCAABasic) == "Totals.13"] <- "STL"
+names(NCAABasic)[names(NCAABasic) == "Totals.14"] <- "BLK"
+names(NCAABasic)[names(NCAABasic) == "Totals.15"] <- "TOV"
+names(NCAABasic)[names(NCAABasic) == "Totals.16"] <- "PF"
+
+NCAABasic <- NCAABasic[!grepl("School", NCAABasic$School),]
+NCAABasic <- NCAABasic[!grepl("Overall", NCAABasic$G),]
+NCAABasic$School <- str_remove(NCAABasic$School, "NCAA")
+NCAABasic <- NCAABasic[!grepl(0, NCAABasic$G),]
+
+NCAABasic$Season <- paste(NCAABasic$School, NCAABasic$Year, sep=" ")
+NCAABasic = NCAABasic[,c(33,1,32,2:31)]
+
+#Basic Opponent
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-opponent-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAABasicOpp = ldply(tbl, data.frame)
+NCAABasicOpp = NCAABasicOpp[,c(-1,-4:-22)]
+
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Var.2"] <- "School"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Overall"] <- "G"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.1"] <- "OFG"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.2"] <- "OFGA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.3"] <- "OFGPer"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.4"] <- "O3P"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.5"] <- "O3PA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.6"] <- "O3Per"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.7"] <- "OFT"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.8"] <- "OFTA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.9"] <- "OFTPer"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.10"] <- "OORB"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.11"] <- "OTRB"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.12"] <- "OAST"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.13"] <- "OSTL"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.14"] <- "OBLK"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.15"] <- "OTOV"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.16"] <- "OPF"
+
+NCAABasicOpp <- NCAABasicOpp[!grepl("School", NCAABasicOpp$School),]
+NCAABasicOpp <- NCAABasicOpp[!grepl("Overall", NCAABasicOpp$G),]
+NCAABasicOpp$School <- str_remove(NCAABasicOpp$School, "NCAA")
+NCAABasicOpp <- NCAABasicOpp[!grepl(0, NCAABasicOpp$G),]
+NCAABasicOpp = NCAABasicOpp[,c(-2)]
+
+NCAABasicOpp$Season <- paste(NCAABasicOpp$School, NCAABasicOpp$Year, sep=" ")
+
+NCAABasicOpp = NCAABasicOpp[,c(19,1,18,2:17)]
+
+ncaaB = join(NCAABasic,NCAABasicOpp, by = 'Season', type = 'left', match = 'first')
+ncaaB = ncaaB[,c(-34,-35)]
+
+#Scrape Advanced Stats
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-advanced-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAAAdv = ldply(tbl, data.frame)
+NCAAAdv = NCAAAdv[,-c(1,4:21)]
+
+names(NCAAAdv)[names(NCAAAdv) == "Var.2"] <- "School"
+names(NCAAAdv)[names(NCAAAdv) == "Overall"] <- "G"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced"] <- "Pace"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.1"] <- "ORtg"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.2"] <- "FTr"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.3"] <- "X3PAr"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.4"] <- "TSPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.5"] <- "TRBPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.6"] <- "ASTPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.7"] <- "STLPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.8"] <- "BLKPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.9"] <- "eFGPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.10"] <- "TOVPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.11"] <- "ORBPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.12"] <- "FT_FGA"
+
+NCAAAdv <- NCAAAdv[!grepl("School", NCAAAdv$School),]
+NCAAAdv <- NCAAAdv[!grepl("Overall", NCAAAdv$G),]
+NCAAAdv$School <- str_remove(NCAAAdv$School, "NCAA")
+NCAAAdv <- NCAAAdv[!grepl(0, NCAAAdv$G),]
+NCAAAdv = NCAAAdv[,c(-2)]
+
+NCAAAdv$Season <- paste(NCAAAdv$School, NCAAAdv$Year, sep=" ")
+NCAAAdv = NCAAAdv[,c(16,1,15,2:14)]
+
+#Scrape Opp Advanced
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-advanced-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAAAdvOpp = ldply(tbl, data.frame)
+NCAAAdvOpp = NCAAAdvOpp[,-c(1,4:21)]
+
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "Var.2"] <- "School"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "Overall"] <- "G"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced"] <- "O_Pace"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.1"] <- "O_ORtg"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.2"] <- "OFTr"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.3"] <- "O_3PAr"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.4"] <- "O_TSPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.5"] <- "OTRBPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.6"] <- "OASTPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.7"] <- "OSTLPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.8"] <- "OBLKPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.9"] <- "OeFGPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.10"] <- "OTOVPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.11"] <- "O_ORBPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.12"] <- "OFT_FGA"
+
+NCAAAdvOpp <- NCAAAdvOpp[!grepl("School", NCAAAdvOpp$School),]
+NCAAAdvOpp <- NCAAAdvOpp[!grepl("Overall", NCAAAdvOpp$G),]
+NCAAAdvOpp$School <- str_remove(NCAAAdvOpp$School, "NCAA")
+NCAAAdvOpp <- NCAAAdvOpp[!grepl(0, NCAAAdvOpp$G),]
+NCAAAdvOpp = NCAAAdvOpp[,c(-2)]
+
+NCAAAdvOpp$Season <- paste(NCAAAdvOpp$School, NCAAAdvOpp$Year, sep=" ")
+NCAAAdvOpp = NCAAAdvOpp[,c(16,1,15,2:14)]
+
+ncaaA = join(NCAAAdv,NCAAAdvOpp, by = 'Season', type = 'left', match = 'first')
+ncaaA = ncaaA[,c(-17,-18)]
+
+#Combine Advanced and Basic
+
+ncaa = join(ncaaB,ncaaA, by = 'Season', type = 'left', match = 'first')
+ncaa$School <- str_replace_all(ncaa$School, "\\s","")
+ncaa$School <- str_replace_all(ncaa$School, "-","")
+ncaa$School <- str_replace_all(ncaa$School, "[']","")
+ncaa$PPG <- round(as.numeric(ncaa$TotPTS)/as.numeric(ncaa$G), 3)
+ncaa$PAPG <- round(as.numeric(ncaa$OppPTS)/as.numeric(ncaa$G), 3)
+ncaa$FGPG <- round(as.numeric(ncaa$FG)/as.numeric(ncaa$G), 3)
+ncaa$FGAPG <- round(as.numeric(ncaa$FGA)/as.numeric(ncaa$G), 3)
+ncaa$X3PG <- round(as.numeric(ncaa$X3P)/as.numeric(ncaa$G), 3)
+ncaa$X3APG <- round(as.numeric(ncaa$X3PA)/as.numeric(ncaa$G), 3)
+ncaa$FTPG <- round(as.numeric(ncaa$FT)/as.numeric(ncaa$G), 3)
+ncaa$FTAPG <- round(as.numeric(ncaa$FTA)/as.numeric(ncaa$G), 3)
+ncaa$ORBPG <- round(as.numeric(ncaa$ORB)/as.numeric(ncaa$G), 3)
+ncaa$TRBPG <- round(as.numeric(ncaa$TRB)/as.numeric(ncaa$G), 3)
+ncaa$ASTPG <- round(as.numeric(ncaa$AST)/as.numeric(ncaa$G), 3)
+ncaa$STLPG <- round(as.numeric(ncaa$STL)/as.numeric(ncaa$G), 3)
+ncaa$BLKPG <- round(as.numeric(ncaa$BLK)/as.numeric(ncaa$G), 3)
+ncaa$TOVPG <- round(as.numeric(ncaa$TOV)/as.numeric(ncaa$G), 3)
+ncaa$PFPG <- round(as.numeric(ncaa$PF)/as.numeric(ncaa$G), 3)
+
+ncaa$OFGPG <- round(as.numeric(ncaa$OFG)/as.numeric(ncaa$G), 3)
+ncaa$OFGAPG <- round(as.numeric(ncaa$OFGA)/as.numeric(ncaa$G), 3)
+ncaa$O3PG <- round(as.numeric(ncaa$O3P)/as.numeric(ncaa$G), 3)
+ncaa$O3APG <- round(as.numeric(ncaa$O3PA)/as.numeric(ncaa$G), 3)
+ncaa$OFTPG <- round(as.numeric(ncaa$OFT)/as.numeric(ncaa$G), 3)
+ncaa$OFTAPG <- round(as.numeric(ncaa$OFTA)/as.numeric(ncaa$G), 3)
+ncaa$O_ORBPG <- round(as.numeric(ncaa$OORB)/as.numeric(ncaa$G), 3)
+ncaa$O_TRBPG <- round(as.numeric(ncaa$OTRB)/as.numeric(ncaa$G), 3)
+ncaa$OASTPG <- round(as.numeric(ncaa$OAST)/as.numeric(ncaa$G), 3)
+ncaa$OSTLPG <- round(as.numeric(ncaa$OSTL)/as.numeric(ncaa$G), 3)
+ncaa$OBLKPG <- round(as.numeric(ncaa$OBLK)/as.numeric(ncaa$G), 3)
+ncaa$OTOVPG <- round(as.numeric(ncaa$OTOV)/as.numeric(ncaa$G), 3)
+ncaa$OPFPG <- round(as.numeric(ncaa$OPF)/as.numeric(ncaa$G), 3)
+
+ncaa = ncaa[,c(2:9,78,79,80,81,20,82,83,23,84,85,26,86:92,93,94,36,95,96,39,97,98,42,99:105,52:64,66:77)]
+rm(ncaaA,ncaaB,NCAAAdv,NCAAAdvOpp,NCAABasic,NCAABasicOpp,tbl,urls,years,i,j, url)
+
+# Game by Game Scores
+# School List
+url <- "https://www.sports-reference.com/cbb/schools/"
+tbl = list()
+tbl[[1]] = url %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table() 
+
+schools <- ldply(tbl, data.frame)
+
+schools <- schools[!(schools$To < 2010 | schools$To == "To"),]
+schools$School <- gsub("\\s*\\w*$", "", schools$School)
+schools$School <- str_replace_all(schools$School, "\\s","-")
+schools$School <- gsub("[(,)]","", schools$School)
+schools$School <- tolower(schools$School)
+schools <- schools[,c("School","To","From")]
+
+schools$School <- str_replace_all(schools$School, "arizona-state-sun","arizona-state")
+schools$School <- str_replace_all(schools$School, "arkansas-state-red","arkansas-state")
+schools$School <- str_replace_all(schools$School, "albany-ny-great","albany-ny")
+schools$School <- str_replace_all(schools$School, "bluff-golden","bluff")
+schools$School <- str_replace_all(schools$School, "[&]","")
+schools$School <- str_replace_all(schools$School, "army-black","army")
+schools$School <- str_replace_all(schools$School, "state-blue","state")
+schools$School <- str_replace_all(schools$School, "-big","")
+schools$School <- str_replace_all(schools$School, "-fightin'-blue","")
+schools$School <- str_replace_all(schools$School, "-blue","")
+schools$School <- str_replace_all(schools$School, "-red","")
+schools$School <- str_replace_all(schools$School, "-purple","")
+schools$School <- str_replace_all(schools$School, "-runnin'","")
+schools$School <- str_replace_all(schools$School, "-yellow","")
+schools$School <- str_replace_all(schools$School, "-rainbow","")
+schools$School <- str_replace_all(schools$School, "-fighting","")
+schools$School <- str_replace_all(schools$School, "-mountain","")
+schools$School <- str_replace_all(schools$School, "louisiana-ragin'","louisiana-lafayette")
+schools$School <- str_replace_all(schools$School, "-golden","")
+schools$School <- str_replace_all(schools$School, "-thundering","")
+schools$School <- str_replace_all(schools$School, "-river","")
+schools$School <- str_replace_all(schools$School, "-delta","")
+schools$School <- str_replace_all(schools$School, "[']","")
+schools$School <- str_replace_all(schools$School, "-tar","")
+schools$School <- str_replace_all(schools$School, "-mean","")
+schools$School <- str_replace_all(schools$School, "-nittany","")
+schools$School <- str_replace_all(schools$School, "-scarlet","")
+schools$School <- str_replace_all(schools$School, "tulane-green","tulane")
+schools$School <- str_replace_all(schools$School, "-wolf","")
+schools$School <- str_replace_all(schools$School, "-black","")
+schools$School <- str_replace_all(schools$School, "-horned","")
+schools$School <- str_replace_all(schools$School, "-demon","")
+schools$School <- str_replace_all(schools$School, "william--mary","william-mary")
+schools$School <- str_replace_all(schools$School, "cal-state-long-beach","long-beach-state")
+schools$School <- str_replace_all(schools$School, "-crimson","")
+schools$School <- str_replace_all(schools$School, "kansas-city","missouri-kansas-city")
+schools$School <- str_replace_all(schools$School, "little-rock","arkansas-little-rock")
+schools$School <- str_replace_all(schools$School, "nc-state","north-carolina-state")
+schools$School <- str_replace_all(schools$School, "omaha","nebraska-omaha")
+schools$School <- str_replace_all(schools$School, "purdue-fort-wayne","ipfw")
+schools$School <- str_replace_all(schools$School, "tcu","texas-christian")
+schools$School <- str_replace_all(schools$School, "utep","texas-el-paso")
+schools$School <- str_replace_all(schools$School, "utsa","texas-san-antonio")
+schools$School <- str_replace_all(schools$School, "uab","alabama-birmingham")
+schools$School <- str_replace_all(schools$School, "the-citadel","citadel")
+schools$School <- str_replace_all(schools$School, "uc-","california-")
+schools$School <- str_replace_all(schools$School, "ut-arlington","texas-arlington")
+schools$School <- str_replace_all(schools$School, "unc-","north-carolina-")
+schools$School <- str_replace_all(schools$School, "ucside","california-riverside")
+schools$School <- str_replace_all(schools$School, "texas-rio-grande-valley","texas-pan-american")
+schools$School <- str_replace_all(schools$School, "[.]","")
+
+#2010
+urls = list()
+missing_schools <- c("abilene-christian","houston-baptist","massachusetts-lowell","north-dakota","seattle")
+team_list10 <- schools %>% subset(From <= 2010) %>% filter(!School %in% missing_schools) %>% select(School)
+for (i in 1:length(team_list10[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list10[[1]][i],'/2010-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2010
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list10[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- t1
+
+#2011
+urls = list()
+missing_schools <- c("abilene-christian","massachusetts-lowell","new-orleans")
+team_list11 <- schools %>% subset(From <= 2011)%>% filter(!School %in% missing_schools) %>% select(School)
+for (i in 1:length(team_list11[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list11[[1]][i],'/2011-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2011
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list11[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2012
+urls = list()
+missing_schools <- c("abilene-christian","new-orleans","massachusetts-lowell")
+team_list12 <- schools %>% subset(From <= 2012 & To >= 2012) %>% filter(!School %in% missing_schools) %>% select(School)
+for (i in 1:length(team_list12[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list12[[1]][i],'/2012-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2012
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list12[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2013
+urls = list()
+missing_schools <- c("abilene-christian","massachusetts-lowell")
+team_list13 <- schools %>% subset(From <= 2013 & To >= 2013) %>% filter(!School %in% missing_schools) %>% select(School)
+for (i in 1:length(team_list13[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list13[[1]][i],'/2013-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2013
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list13[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2014
+urls = list()
+team_list14 <- schools %>% subset(From <= 2014 & To >= 2014) %>% select(School)
+for (i in 1:length(team_list14[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list14[[1]][i],'/2014-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2014
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list14[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+schedule$Time <- NA
+schedule <- schedule[,c(1:2,17,3:16)]
+schedule <- setNames(schedule,c("G","Date","Time","Type","Var.5","Opponent","Conf","Var.8","Tm","Opp","OT","W","L","Streak","Arena","Year","Team"))
+
+#2015
+urls = list()
+team_list15 <- schools %>% subset(From <= 2015 & To >= 2015) %>% select(School)
+for (i in 1:length(team_list15[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list15[[1]][i],'/2015-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2015
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list15[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2016
+urls = list()
+team_list16 <- schools %>% subset(From <= 2016 & To >= 2016) %>% select(School)
+for (i in 1:length(team_list16[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list16[[1]][i],'/2016-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2016
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list16[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2017
+urls = list()
+team_list17 <- schools %>% subset(From <= 2017 & To >= 2017) %>% select(School)
+for (i in 1:length(team_list17[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list17[[1]][i],'/2017-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2017
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list17[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2018
+urls = list()
+team_list18 <- schools %>% subset(From <= 2018 & To >= 2018) %>% select(School)
+for (i in 1:length(team_list18[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list18[[1]][i],'/2018-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2018
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list18[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2019
+urls = list()
+team_list19 <- schools %>% subset(From <= 2019 & To >= 2019) %>% select(School)
+for (i in 1:length(team_list19[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list19[[1]][i],'/2019-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2019
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list19[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2020
+urls = list()
+team_list20 <- schools %>% subset(From <= 2020 & To >= 2020) %>% select(School)
+for (i in 1:length(team_list20[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list20[[1]][i],'/2020-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2020
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list20[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2021
+urls = list()
+covid_schools <- c("bethune-cookman","brown","harvard","yale","princeton","columbia","cornell","dartmouth","pennsylvania","maryland-eastern-shore")
+team_list21 <- schools %>% subset(From <= 2021 & To >= 2021) %>% filter(!School %in% covid_schools) %>% select(School)
+for (i in 1:length(team_list21[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list21[[1]][i],'/2021-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2021
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list21[[1]][j]
+}
+
+t1 = ldply(tbl, data.frame)
+schedule <- rbind(t1, schedule)
+
+#2022
+urls = list()
+team_list22 <- schools %>% subset(From <= 2022 & To >= 2022) %>% select(School)
+for (i in 1:length(team_list22[[1]])) {
+  url = paste0('https://www.sports-reference.com/cbb/schools/',team_list22[[1]][i],'/2022-schedule.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = 2022
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table#schedule") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  tbl[[j]]$Team = team_list22[[1]][j]
+}
+
+schedule2022 = ldply(tbl, data.frame)
+
+rm(team_list20, team_list21, team_list22, i,j,url,urls,t1,covid_schools,tbl,years, schools,team_list10,team_list11,team_list12,team_list13,team_list14,team_list15,team_list16,team_list17,team_list18,team_list19, missing_schools)
+
+# Lineup schedule and ncaa database formating
+## Remove NA and potential input errors
+schedule$Tm <- as.numeric(schedule$Tm)
+schedule <- schedule[!(is.na(schedule$Tm) | schedule$Date == "Date" | schedule$Tm<20 | schedule$Tm==""),]
+
+# Match formatting between different sources
+schedule$Team <- str_replace_all(schedule$Team, "-"," ")
+schedule$Team <- str_to_title(schedule$Team)
+schedule$Team <- str_replace_all(schedule$Team, "\\s","")
+schedule$Team <- str_replace_all(schedule$Team, "AlabamaAm","AlabamaA&M")
+schedule$Team <- str_replace_all(schedule$Team, "AlbanyNy","Albany(NY)")
+schedule$Team <- str_replace_all(schedule$Team, "LongBeachState","CalStateLongBeach")
+schedule$Team <- str_replace_all(schedule$Team, "CollegeOf","Collegeof")
+schedule$Team <- str_replace_all(schedule$Team, "Depaul","DePaul")
+schedule$Team <- str_replace_all(schedule$Team, "FloridaAm","FloridaA&M")
+schedule$Team <- str_replace_all(schedule$Team, "Iupui","IUPUI")
+schedule$Team <- str_replace_all(schedule$Team, "MissouriKansasCity","KansasCity")
+schedule$Team <- str_replace_all(schedule$Team, "ArkansasLittleRock","LittleRock")
+schedule$Team <- str_replace_all(schedule$Team, "LouisianaLafayette","Louisiana")
+schedule$Team <- str_replace_all(schedule$Team, "LoyolaIl","Loyola(IL)")
+schedule$Team <- str_replace_all(schedule$Team, "LoyolaMd","Loyola(MD)")
+schedule$Team <- str_replace_all(schedule$Team, "McneeseState","McNeeseState")
+schedule$Team <- str_replace_all(schedule$Team, "MiamiFl","Miami(FL)")
+schedule$Team <- str_replace_all(schedule$Team, "MiamiOh","Miami(OH)")
+schedule$Team <- str_replace_all(schedule$Team, "MountStMarys","MountSt.Marys")
+schedule$Team <- str_replace_all(schedule$Team, "NorthCarolinaState","NCState")
+schedule$Team <- str_replace_all(schedule$Team, "Njit","NJIT")
+schedule$Team <- str_replace_all(schedule$Team, "NorthCarolinaAt","NorthCarolinaA&T")
+schedule$Team <- str_replace_all(schedule$Team, "NebraskaOmaha","Omaha")
+schedule$Team <- str_replace_all(schedule$Team, "Ipfw","PurdueFortWayne")
+schedule$Team <- str_replace_all(schedule$Team, "SaintFrancisPa","SaintFrancis(PA)")
+schedule$Team <- str_replace_all(schedule$Team, "SaintMarysCa","SaintMarys(CA)")
+schedule$Team <- str_replace_all(schedule$Team, "SouthernIllinoisEdwardsville","SIUEdwardsville")
+schedule$Team <- str_replace_all(schedule$Team, "TexasAm","TexasA&M")
+schedule$Team <- str_replace_all(schedule$Team, "StBonaventure","St.Bonaventure")
+schedule$Team <- str_replace_all(schedule$Team, "StFrancisNy","St.Francis(NY)")
+schedule$Team <- str_replace_all(schedule$Team, "StJohnsNy","St.Johns(NY)")
+schedule$Team <- str_replace_all(schedule$Team, "StephenFAustin","StephenF.Austin")
+schedule$Team <- str_replace_all(schedule$Team, "TexasChristian","TCU")
+schedule$Team <- str_replace_all(schedule$Team, "TexasElPaso","UTEP")
+schedule$Team <- str_replace_all(schedule$Team, "TexasPanAmerican","TexasRioGrandeValley")
+schedule$Team <- str_replace_all(schedule$Team, "Citadel","TheCitadel")
+schedule$Team <- str_replace_all(schedule$Team, "AlabamaBirmingham","UAB")
+schedule$Team <- str_replace_all(schedule$Team, "CaliforniaDavis","UCDavis")
+schedule$Team <- str_replace_all(schedule$Team, "CaliforniaIrvine","UCIrvine")
+schedule$Team <- str_replace_all(schedule$Team, "CaliforniaRiverside","UCRiverside")
+schedule$Team <- str_replace_all(schedule$Team, "CaliforniaSanDiego","UCSanDiego")
+schedule$Team <- str_replace_all(schedule$Team, "CaliforniaSantaBarbara","UCSantaBarbara")
+schedule$Team <- str_replace_all(schedule$Team, "Ucla","UCLA")
+schedule$Team <- str_replace_all(schedule$Team, "NorthCarolinaAsheville","UNCAsheville")
+schedule$Team <- str_replace_all(schedule$Team, "NorthCarolinaGreensboro","UNCGreensboro")
+schedule$Team <- str_replace_all(schedule$Team, "NorthCarolinaWilmington","UNCWilmington")
+schedule$Team <- str_replace_all(schedule$Team, "TexasArlington","UTArlington")
+schedule$Team <- str_replace_all(schedule$Team, "TexasSanAntonio","UTSA")
+schedule$Team <- str_replace_all(schedule$Team, "VirginiaMilitaryInstitute","VMI")
+schedule$Team <- str_replace_all(schedule$Team, "WilliamMary","William&Mary")
+schedule$Team <- str_replace_all(schedule$Team, "CentenaryLa","Centenary(LA)")
+
+schedule$Opponent <- gsub("[(,),0-9,']+","", schedule$Opponent)
+schedule$Opponent <- str_replace_all(schedule$Opponent, "\\s","")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "-","")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "MiamiOH","Miami(OH)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "MiamiFL","Miami(FL)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "AlbanyNY","Albany(NY)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "CentenaryLA","Centenary(LA)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "LoyolaIL","Loyola(IL)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "LoyolaMD","Loyola(MD)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "SaintFrancisPA","SaintFrancis(PA)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "SaintMarysCA","SaintMarys(CA)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "St.FrancisNY","St.Francis(NY)")
+schedule$Opponent <- str_replace_all(schedule$Opponent, "St.JohnsNY","St.Johns(NY)")
+
+schedule$Season <- paste(schedule$Team, schedule$Year, sep=" ")
+schedule$OppSeason <- paste(schedule$Opponent, schedule$Year, sep=" ")
+schedule <- schedule[,c("Season","OppSeason","Year","Team","Opponent","Tm")]
+
+# Join Data
+ncaa$Season <- paste(ncaa$School, ncaa$Year, sep=" ")
+ncaa$OppSeason <- paste(ncaa$School, ncaa$Year, sep=" ")
+Off_stats <- ncaa[,c("Season","WinPer","SRS","SOS","PPG","FGPG","FGAPG","FGPer","X3PG","X3APG",
+                     "X3Per","FTPG","FTAPG","FTPer","ORBPG","TRBPG","ASTPG","TOVPG","PFPG","Pace","ORtg","FTr",
+                     "X3PAr","TSPer","TRBPer","ASTPer","eFGPer","TOVPer","ORBPer","FT_FGA")]
+Def_stats <- ncaa[,c("OppSeason","WinPer","SRS","SOS","PAPG","STLPG","BLKPG","OFGPG","OFGAPG",
+                     "OFGPer","O3PG","O3APG","O3Per","OFTPG","OFTAPG","OFTPer","O_ORBPG","O_TRBPG","OASTPG",
+                     "OBLKPG","OPFPG","STLPer","BLKPer","Pace","O_ORtg","OFTr","O_3PAr","O_TSPer","OTRBPer",
+                     "OASTPer","OeFGPer","O_ORBPer","OFT_FGA")]
+names(Def_stats)[names(Def_stats) == "WinPer"] <- "OWinPer"
+names(Def_stats)[names(Def_stats) == "SRS"] <- "OSRS"
+names(Def_stats)[names(Def_stats) == "SOS"] <- "OSOS"
+
+cbb <- join(schedule, Off_stats, by = 'Season', type = 'left', match = 'all')
+cbb <- join(cbb, Def_stats, by = 'OppSeason', type = 'left', match = 'all')
+cbb <- cbb[,-c(1,2)]
+cbb <- cbb[complete.cases(cbb),]
+
+# Write into saved database to limit later run time
+write.csv(cbb, "C:/Users/qschr/OneDrive/Desktop/Data Projects/NCAA/CBB.csv", row.names = TRUE)
+
+rm(Off_stats,Def_stats,year_list,ncaa,schedule)
+```
+
+```{r - Linear Regression Model}
+cbb <- read.csv("C:/Users/qschr/OneDrive/Desktop/Data Projects/NCAA/CBB.csv", header = TRUE, sep = ",")
+cbb <- cbb[,-1]
+cbb <- cbb[complete.cases(cbb),]
+write.csv(cbb, "C:/Users/qschr/OneDrive/Desktop/Data Projects/NCAA/CBB.csv", row.names = TRUE)
+
+set.seed(101) 
+training.samples <- cbb$Tm %>% createDataPartition(p = 0.8, list = FALSE)
+train <- cbb[training.samples,]
+test <- cbb[-training.samples,]
+
+fullmodel <- lm(Tm~WinPer+SRS+SOS+PPG+FGPG+FGAPG+FGPer+X3PG+X3APG+X3Per+FTPG+FTAPG+FTPer+ORBPG+TRBPG+ASTPG+
+                TOVPG+PFPG+Pace+ORtg+FTr+X3PAr+TSPer+TRBPer+ASTPer+eFGPer+TOVPer+ORBPer+FT_FGA+OWinPer+OSRS+
+                OSOS+PAPG+STLPG+BLKPG+OFGPG+OFGAPG+OFGPer+O3PG+O3APG+O3Per+OFTPG+OFTAPG+OFTPer+O_ORBPG+O_TRBPG+
+                OASTPG+OBLKPG+OPFPG+STLPer+BLKPer+Pace.1+O_ORtg+OFTr+O_3PAr+O_TSPer+OTRBPer+OASTPer+OeFGPer+
+                O_ORBPer+OFT_FGA, train)
+
+Anova(fullmodel,Type = II)
+summary(fullmodel)
+
+mod1 <- lm(Tm~WinPer+SRS+SOS+FGAPG+X3APG+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+OSOS+PAPG+STLPG+
+             O3PG+O3Per+O_ORBPG+O_TRBPG+OPFPG+STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train)
+
+Anova(mod1,Type = II)
+summary(mod1)
+```
+
+```{r - Assumption Test}
+# Brown-Foresythe Test - Not significant
+train$groups <- cut(train$WinPer+train$SRS+train$SOS+train$FGAPG+train$X3APG+train$FTAPG+train$PFPG+train$Pace+
+                      train$X3PAr+train$TSPer+train$TRBPer+train$TOVPer+train$OSRS+train$OSOS+train$PAPG+
+                      train$STLPG+train$O3PG+train$O3Per+train$O_ORBPG+train$O_TRBPG+train$OPFPG+train$STLPer+
+                      train$BLKPer+train$O_ORtg+train$OASTPer+train$O_ORBPer+train$OFT_FGA, 5)
+train$residuals <- mod1$residuals
+bf.test(residuals~groups, train)
+
+# Plots to test Normailty of Residuals and Linearity of Data
+plot(mod1)
+
+# Test for Influential points (value > 4/(n-p-1)) - 32444 is influential
+plot(mod1, 4)
+
+train['32444',]
+
+# Testing model without influential point
+train2 <- train[!(train$Year == '2018' & train$Team == 'SavannahState' & train$Opponent == "NorthCarolinaCentral"
+                  & train$Tm == '56'),]
+
+mod2 <- lm(Tm~WinPer+SRS+SOS+FGAPG+X3APG+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+OSOS+PAPG+STLPG+
+             O3PG+O3Per+O_ORBPG+O_TRBPG+OPFPG+STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train2)
+
+summary(mod2)
+# Very simialar stats to original model - will leave influential point in
+rm(mod2, train2)
+
+# Multicollinearity Check
+vif(mod1) # Lots of variables interacting with each other...
+
+# Removing X3APG, STLPG, SOS, OSOS, FGAPG
+mod3 <- lm(Tm~WinPer+SRS+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+PAPG+
+             O3PG+O3Per+O_ORBPG+O_TRBPG+OPFPG+STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train)
+
+Anova(mod3,Type = II)
+vif(mod3)
+
+# Removing non significant variables
+mod4 <- lm(Tm~WinPer+SRS+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+PAPG+
+             O3PG+O_ORBPG+O_TRBPG+STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train)
+
+Anova(mod4,Type = II)
+vif(mod4)
+
+predictions1 <- predict(mod1, test)
+predictions4 <- predict(mod4, test)
+
+data.frame(R2 = R2(predictions1, test$Tm),RMSE = RMSE(predictions1, test$Tm),
+           MAE = MAE(predictions1, test$Tm),AIC = AIC(mod1))
+data.frame(R2_4 = R2(predictions4, test$Tm),RMSE_4 = RMSE(predictions4, test$Tm),
+           MAE_4 = MAE(predictions4,test$Tm),AIC_4 = AIC(mod4))
+# Similar results (mod1 better) I would lean towards using mod4 as it has less redundency
+rm(predictions1,predictions4,mod3)
+```
+
+```{r - randomForest Model}
+rf1 <- randomForest(Tm~WinPer+SRS+SOS+PPG+FGPG+FGAPG+FGPer+X3PG+X3APG+X3Per+FTPG+FTAPG+FTPer+ORBPG+TRBPG+ASTPG+
+                TOVPG+PFPG+Pace+ORtg+FTr+X3PAr+TSPer+TRBPer+ASTPer+eFGPer+TOVPer+ORBPer+FT_FGA+OWinPer+OSRS+
+                OSOS+PAPG+STLPG+BLKPG+OFGPG+OFGAPG+OFGPer+O3PG+O3APG+O3Per+OFTPG+OFTAPG+OFTPer+O_ORBPG+O_TRBPG+
+                OASTPG+OBLKPG+OPFPG+STLPer+BLKPer+Pace.1+O_ORtg+OFTr+O_3PAr+O_TSPer+OTRBPer+OASTPer+OeFGPer+
+                O_ORBPer+OFT_FGA, data = train, mtry = 3,importance = TRUE, na.action = na.omit)
+```
+
+```{r - Model Comparison}
+test$pred <- predict(mod4, test)
+test$rf_pred <- predict(rf1, test)
+data.frame(R2 = R2(test$pred, test$Tm),RMSE = RMSE(test$pred, test$Tm),MAE = MAE(test$pred, test$Tm),
+           AIC = AIC(mod4))
+data.frame(R2 = R2(test$rf_pred, test$Tm),RMSE = RMSE(test$rf_pred, test$Tm),MAE = MAE(test$rf_pred, test$Tm))
+
+# Linear Regression Model is better
+final_mod <- lm(Tm~WinPer+SRS+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+PAPG+O3PG+O_ORBPG+O_TRBPG+
+                    STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train)
+
+summary(final_mod)
+
+rm(test, fullmodel, training.samples, train, mod1, mod4, rf1)
+```
+
+```{r - Daily Predictions}
+# Year Input
+year_list <- c(2010:2022)
+
+#Basic
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_node("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years+1
+}
+
+NCAABasic = ldply(tbl, data.frame)
+
+NCAABasic = NCAABasic[-1,c(-1,-9,-12,-15,-18,-21,-22)]
+
+names(NCAABasic)[names(NCAABasic) == "Var.2"] <- "School"
+names(NCAABasic)[names(NCAABasic) == "Overall"] <- "G"
+names(NCAABasic)[names(NCAABasic) == "Overall.1"] <- "W"
+names(NCAABasic)[names(NCAABasic) == "Overall.2"] <- "L"
+names(NCAABasic)[names(NCAABasic) == "Overall.3"] <- "WinPer"
+names(NCAABasic)[names(NCAABasic) == "Overall.4"] <- "SRS"
+names(NCAABasic)[names(NCAABasic) == "Overall.5"] <- "SOS"
+names(NCAABasic)[names(NCAABasic) == "Conf."] <- "ConW"
+names(NCAABasic)[names(NCAABasic) == "Conf..1"] <- "ConL"
+names(NCAABasic)[names(NCAABasic) == "Home"] <- "HomeW"
+names(NCAABasic)[names(NCAABasic) == "Home.1"] <- "HomeL"
+names(NCAABasic)[names(NCAABasic) == "Away"] <- "AwayW"
+names(NCAABasic)[names(NCAABasic) == "Away.1"] <- "AwayL"
+names(NCAABasic)[names(NCAABasic) == "Points"] <- "TotPTS"
+names(NCAABasic)[names(NCAABasic) == "Points.1"] <- "OppPTS"
+names(NCAABasic)[names(NCAABasic) == "Totals"] <- "MP"
+names(NCAABasic)[names(NCAABasic) == "Totals.1"] <- "FG"
+names(NCAABasic)[names(NCAABasic) == "Totals.2"] <- "FGA"
+names(NCAABasic)[names(NCAABasic) == "Totals.3"] <- "FGPer"
+names(NCAABasic)[names(NCAABasic) == "Totals.4"] <- "X3P"
+names(NCAABasic)[names(NCAABasic) == "Totals.5"] <- "X3PA"
+names(NCAABasic)[names(NCAABasic) == "Totals.6"] <- "X3Per"
+names(NCAABasic)[names(NCAABasic) == "Totals.7"] <- "FT"
+names(NCAABasic)[names(NCAABasic) == "Totals.8"] <- "FTA"
+names(NCAABasic)[names(NCAABasic) == "Totals.9"] <- "FTPer"
+names(NCAABasic)[names(NCAABasic) == "Totals.10"] <- "ORB"
+names(NCAABasic)[names(NCAABasic) == "Totals.11"] <- "TRB"
+names(NCAABasic)[names(NCAABasic) == "Totals.12"] <- "AST"
+names(NCAABasic)[names(NCAABasic) == "Totals.13"] <- "STL"
+names(NCAABasic)[names(NCAABasic) == "Totals.14"] <- "BLK"
+names(NCAABasic)[names(NCAABasic) == "Totals.15"] <- "TOV"
+names(NCAABasic)[names(NCAABasic) == "Totals.16"] <- "PF"
+
+NCAABasic <- NCAABasic[!grepl("School", NCAABasic$School),]
+NCAABasic <- NCAABasic[!grepl("Overall", NCAABasic$G),]
+NCAABasic$School <- str_remove(NCAABasic$School, "NCAA")
+NCAABasic <- NCAABasic[!grepl(0, NCAABasic$G),]
+
+NCAABasic$Season <- paste(NCAABasic$School, NCAABasic$Year, sep=" ")
+NCAABasic = NCAABasic[,c(33,1,32,2:31)]
+
+#Basic Opponent
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-opponent-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAABasicOpp = ldply(tbl, data.frame)
+NCAABasicOpp = NCAABasicOpp[,c(-1,-4:-22)]
+
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Var.2"] <- "School"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Overall"] <- "G"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.1"] <- "OFG"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.2"] <- "OFGA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.3"] <- "OFGPer"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.4"] <- "O3P"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.5"] <- "O3PA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.6"] <- "O3Per"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.7"] <- "OFT"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.8"] <- "OFTA"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.9"] <- "OFTPer"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.10"] <- "OORB"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.11"] <- "OTRB"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.12"] <- "OAST"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.13"] <- "OSTL"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.14"] <- "OBLK"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.15"] <- "OTOV"
+names(NCAABasicOpp)[names(NCAABasicOpp) == "Opponent.16"] <- "OPF"
+
+NCAABasicOpp <- NCAABasicOpp[!grepl("School", NCAABasicOpp$School),]
+NCAABasicOpp <- NCAABasicOpp[!grepl("Overall", NCAABasicOpp$G),]
+NCAABasicOpp$School <- str_remove(NCAABasicOpp$School, "NCAA")
+NCAABasicOpp <- NCAABasicOpp[!grepl(0, NCAABasicOpp$G),]
+NCAABasicOpp = NCAABasicOpp[,c(-2)]
+
+NCAABasicOpp$Season <- paste(NCAABasicOpp$School, NCAABasicOpp$Year, sep=" ")
+
+NCAABasicOpp = NCAABasicOpp[,c(19,1,18,2:17)]
+
+ncaaB = join(NCAABasic,NCAABasicOpp, by = 'Season', type = 'left', match = 'first')
+ncaaB = ncaaB[,c(-34,-35)]
+
+#Scrape Advanced Stats
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-advanced-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAAAdv = ldply(tbl, data.frame)
+NCAAAdv = NCAAAdv[,-c(1,4:21)]
+
+names(NCAAAdv)[names(NCAAAdv) == "Var.2"] <- "School"
+names(NCAAAdv)[names(NCAAAdv) == "Overall"] <- "G"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced"] <- "Pace"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.1"] <- "ORtg"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.2"] <- "FTr"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.3"] <- "X3PAr"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.4"] <- "TSPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.5"] <- "TRBPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.6"] <- "ASTPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.7"] <- "STLPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.8"] <- "BLKPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.9"] <- "eFGPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.10"] <- "TOVPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.11"] <- "ORBPer"
+names(NCAAAdv)[names(NCAAAdv) == "School.Advanced.12"] <- "FT_FGA"
+
+NCAAAdv <- NCAAAdv[!grepl("School", NCAAAdv$School),]
+NCAAAdv <- NCAAAdv[!grepl("Overall", NCAAAdv$G),]
+NCAAAdv$School <- str_remove(NCAAAdv$School, "NCAA")
+NCAAAdv <- NCAAAdv[!grepl(0, NCAAAdv$G),]
+NCAAAdv = NCAAAdv[,c(-2)]
+
+NCAAAdv$Season <- paste(NCAAAdv$School, NCAAAdv$Year, sep=" ")
+NCAAAdv = NCAAAdv[,c(16,1,15,2:14)]
+
+#Scrape Opp Advanced
+urls = list()
+for (i in 1:length(year_list)) {
+  url = paste0('https://www.sports-reference.com/cbb/seasons/', year_list[i],'-advanced-school-stats.html')
+  urls[[i]] = url
+}
+
+tbl = list()
+years = year_list[1]
+j = 1
+for (j in seq_along(urls)) {
+  tbl[[j]] = urls[[j]] %>%
+    read_html() %>%
+    html_nodes("table") %>%
+    html_table() 
+  tbl[[j]]$Year = years
+  years = years + 1
+}
+
+NCAAAdvOpp = ldply(tbl, data.frame)
+NCAAAdvOpp = NCAAAdvOpp[,-c(1,4:21)]
+
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "Var.2"] <- "School"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "Overall"] <- "G"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced"] <- "O_Pace"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.1"] <- "O_ORtg"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.2"] <- "OFTr"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.3"] <- "O_3PAr"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.4"] <- "O_TSPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.5"] <- "OTRBPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.6"] <- "OASTPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.7"] <- "OSTLPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.8"] <- "OBLKPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.9"] <- "OeFGPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.10"] <- "OTOVPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.11"] <- "O_ORBPer"
+names(NCAAAdvOpp)[names(NCAAAdvOpp) == "School.Advanced.12"] <- "OFT_FGA"
+
+NCAAAdvOpp <- NCAAAdvOpp[!grepl("School", NCAAAdvOpp$School),]
+NCAAAdvOpp <- NCAAAdvOpp[!grepl("Overall", NCAAAdvOpp$G),]
+NCAAAdvOpp$School <- str_remove(NCAAAdvOpp$School, "NCAA")
+NCAAAdvOpp <- NCAAAdvOpp[!grepl(0, NCAAAdvOpp$G),]
+NCAAAdvOpp = NCAAAdvOpp[,c(-2)]
+
+NCAAAdvOpp$Season <- paste(NCAAAdvOpp$School, NCAAAdvOpp$Year, sep=" ")
+NCAAAdvOpp = NCAAAdvOpp[,c(16,1,15,2:14)]
+
+ncaaA = join(NCAAAdv,NCAAAdvOpp, by = 'Season', type = 'left', match = 'first')
+ncaaA = ncaaA[,c(-17,-18)]
+
+#Combine Advanced and Basic
+
+ncaa = join(ncaaB,ncaaA, by = 'Season', type = 'left', match = 'first')
+ncaa$School <- str_replace_all(ncaa$School, "\\s","")
+ncaa$School <- str_replace_all(ncaa$School, "-","")
+ncaa$School <- str_replace_all(ncaa$School, "[']","")
+ncaa$PPG <- round(as.numeric(ncaa$TotPTS)/as.numeric(ncaa$G), 3)
+ncaa$PAPG <- round(as.numeric(ncaa$OppPTS)/as.numeric(ncaa$G), 3)
+ncaa$FGPG <- round(as.numeric(ncaa$FG)/as.numeric(ncaa$G), 3)
+ncaa$FGAPG <- round(as.numeric(ncaa$FGA)/as.numeric(ncaa$G), 3)
+ncaa$X3PG <- round(as.numeric(ncaa$X3P)/as.numeric(ncaa$G), 3)
+ncaa$X3APG <- round(as.numeric(ncaa$X3PA)/as.numeric(ncaa$G), 3)
+ncaa$FTPG <- round(as.numeric(ncaa$FT)/as.numeric(ncaa$G), 3)
+ncaa$FTAPG <- round(as.numeric(ncaa$FTA)/as.numeric(ncaa$G), 3)
+ncaa$ORBPG <- round(as.numeric(ncaa$ORB)/as.numeric(ncaa$G), 3)
+ncaa$TRBPG <- round(as.numeric(ncaa$TRB)/as.numeric(ncaa$G), 3)
+ncaa$ASTPG <- round(as.numeric(ncaa$AST)/as.numeric(ncaa$G), 3)
+ncaa$STLPG <- round(as.numeric(ncaa$STL)/as.numeric(ncaa$G), 3)
+ncaa$BLKPG <- round(as.numeric(ncaa$BLK)/as.numeric(ncaa$G), 3)
+ncaa$TOVPG <- round(as.numeric(ncaa$TOV)/as.numeric(ncaa$G), 3)
+ncaa$PFPG <- round(as.numeric(ncaa$PF)/as.numeric(ncaa$G), 3)
+
+ncaa$OFGPG <- round(as.numeric(ncaa$OFG)/as.numeric(ncaa$G), 3)
+ncaa$OFGAPG <- round(as.numeric(ncaa$OFGA)/as.numeric(ncaa$G), 3)
+ncaa$O3PG <- round(as.numeric(ncaa$O3P)/as.numeric(ncaa$G), 3)
+ncaa$O3APG <- round(as.numeric(ncaa$O3PA)/as.numeric(ncaa$G), 3)
+ncaa$OFTPG <- round(as.numeric(ncaa$OFT)/as.numeric(ncaa$G), 3)
+ncaa$OFTAPG <- round(as.numeric(ncaa$OFTA)/as.numeric(ncaa$G), 3)
+ncaa$O_ORBPG <- round(as.numeric(ncaa$OORB)/as.numeric(ncaa$G), 3)
+ncaa$O_TRBPG <- round(as.numeric(ncaa$OTRB)/as.numeric(ncaa$G), 3)
+ncaa$OASTPG <- round(as.numeric(ncaa$OAST)/as.numeric(ncaa$G), 3)
+ncaa$OSTLPG <- round(as.numeric(ncaa$OSTL)/as.numeric(ncaa$G), 3)
+ncaa$OBLKPG <- round(as.numeric(ncaa$OBLK)/as.numeric(ncaa$G), 3)
+ncaa$OTOVPG <- round(as.numeric(ncaa$OTOV)/as.numeric(ncaa$G), 3)
+ncaa$OPFPG <- round(as.numeric(ncaa$OPF)/as.numeric(ncaa$G), 3)
+
+ncaa = ncaa[,c(2:9,78,79,80,81,20,82,83,23,84,85,26,86:92,93,94,36,95,96,39,97,98,42,99:105,52:64,66:77)]
+names(ncaa)[names(ncaa) == "School"] <- "Team"
+rm(ncaaA,ncaaB,NCAAAdv,NCAAAdvOpp,NCAABasic,NCAABasicOpp,tbl,urls,years,i,j, url,year_list)
+
+write.csv(ncaa, "C:/Users/qschr/OneDrive/Desktop/Data Projects/NCAA/ncaa.csv", row.names = TRUE)
+
+ncaa <- ncaa %>% subset(Year == 2022)
+
+Off_stats <- ncaa[,c("Team","Year","WinPer","SRS","SOS","PPG","FGPG","FGAPG","FGPer","X3PG","X3APG",
+                     "X3Per","FTPG","FTAPG","FTPer","ORBPG","TRBPG","ASTPG","TOVPG","PFPG","Pace","ORtg","FTr",
+                     "X3PAr","TSPer","TRBPer","ASTPer","eFGPer","TOVPer","ORBPer","FT_FGA")]
+Off_stats[,2:31] <- sapply(Off_stats[,2:31],as.numeric)
+Def_stats <- ncaa[,c("Team","Year","WinPer","SRS","SOS","PAPG","STLPG","BLKPG","OFGPG","OFGAPG",
+                     "OFGPer","O3PG","O3APG","O3Per","OFTPG","OFTAPG","OFTPer","O_ORBPG","O_TRBPG","OASTPG",
+                     "OBLKPG","OPFPG","STLPer","BLKPer","Pace","O_ORtg","OFTr","O_3PAr","O_TSPer","OTRBPer",
+                     "OASTPer","OeFGPer","O_ORBPer","OFT_FGA")]
+Def_stats[,2:34] <- sapply(Def_stats[,2:34],as.numeric)
+names(Def_stats)[names(Def_stats) == "WinPer"] <- "OWinPer"
+names(Def_stats)[names(Def_stats) == "SRS"] <- "OSRS"
+names(Def_stats)[names(Def_stats) == "SOS"] <- "OSOS"
+names(Def_stats)[names(Def_stats) == "Team"] <- "Opponent"
+
+# Read Training Dataset
+cbb <- read.csv("C:/Users/qschr/OneDrive/Desktop/Data Projects/NCAA/CBB.csv", header = TRUE, sep = ",")
+cbb <- cbb[,-1]
+
+set.seed(101) 
+training.samples <- cbb$Tm %>% createDataPartition(p = 0.8, list = FALSE)
+train <- cbb[training.samples,]
+
+final_mod <- lm(Tm~WinPer+SRS+FTAPG+PFPG+Pace+X3PAr+TSPer+TRBPer+TOVPer+OSRS+PAPG+O3PG+O_ORBPG+O_TRBPG+
+                    STLPer+BLKPer+O_ORtg+OASTPer+O_ORBPer+OFT_FGA, train)
+
+rm(training.samples, train, cbb)
+
+# Adding in actual Lines
+url <- paste0('https://sportsbook.draftkings.com/leagues/basketball/88670771')
+
+lines_list <- c(1:1)
+tbl = list()
+for (i in lines_list[1]:length(lines_list)) {
+    tbl[[i]] = url %>%
+        read_html() %>%
+        html_node(xpath = as.character(paste0('//*[@id="root"]/section/section[2]/section/div[3]/div/div[3]/div/div/div[2]/div/div[2]/div[',i,']/table'))) %>%
+        html_table() 
+    names(tbl[[i]])[1] <- "Team"
+}
+
+Lines = ldply(tbl, data.frame)
+
+Lines$Team <- str_replace_all(Lines$Team, "[:digit:]", "")
+Lines$Team <- str_replace_all(Lines$Team, "[:]", "")
+Lines$Team <- str_replace_all(Lines$Team, "PM", "")
+Lines$Team <- str_replace_all(Lines$Team, "AM", "")
+Lines$Team <- str_replace_all(Lines$Team, " ", "")
+
+Lines$Spread <- gsub('.{4}$', '', Lines$SPREAD)
+Lines$Total <- gsub('.{4}$', '', Lines$TOTAL)
+Lines$Total <- gsub('^.{2}', '', Lines$Total)
+Lines <- Lines[,c("Team","Spread","Total")]
+
+Lines$Team <- str_replace_all(Lines$Team, "UNI", "NorthernIowa")
+Lines$Team <- str_replace_all(Lines$Team, "SMU", "SouthernMethodist")
+Lines$Team <- str_replace_all(Lines$Team, "UCF", "CentralFlorida")
+Lines$Team <- str_replace_all(Lines$Team, "LongBeachState", "CalStateLongBeach")
+Lines$Team <- str_replace_all(Lines$Team, "USC", "SouthernCalifornia")
+Lines$Team <- str_replace_all(Lines$Team, "LoyolaMaryland", "Loyola(MD)")
+Lines$Team <- str_replace_all(Lines$Team, "LoyolaChicago", "Loyola(IL)")
+Lines$Team <- str_replace_all(Lines$Team, "SIUE", "SIUEdwardsville")
+
+for (i in 1:length(Lines$Team)) {
+  Lines$Opponent[i] <- ifelse(i %% 2 == 0, Lines$Team[i-1],Lines$Team[i+1])
+}
+Lines <- Lines[,c("Team","Opponent","Spread","Total")]
+
+Current_Wk <- join(Lines, Off_stats, by = 'Team', type = 'left', match = 'first')
+Current_Wk <- join(Current_Wk, Def_stats, by = 'Opponent', type = 'left', match = 'first')
+Current_Wk <- Current_Wk[complete.cases(Current_Wk),]
+Current_Wk$Pts <- round(predict(final_mod, Current_Wk),2)
+Current_Wk <- Current_Wk[,c("Team","Opponent","Year","Pts","Spread","Total")]
+for (i in 1:length(Current_Wk$Team)) {
+  for (j in 1:length(Current_Wk$Opponent)) {
+    Current_Wk$OppPts[i] <- ifelse(Current_Wk$Team[i] == Current_Wk$Opponent[j],Current_Wk$Pts[j],"")
+    ifelse(Current_Wk$OppPts[i] == Current_Wk$Pts[j], break, next)
+  }
+}
+Current_Wk$OppPts <- as.numeric(Current_Wk$OppPts)
+for (i in 1:length(Current_Wk$Team)) {
+  Current_Wk$Winner[i] <- ifelse(Current_Wk$Pts[i] > Current_Wk$OppPts[i],Current_Wk$Team[i],Current_Wk$Opponent[i])
+  Current_Wk$ProjSpread[i] <- ifelse(Current_Wk$Winner[i] == Current_Wk$Team[i], Current_Wk$Pts[i] - Current_Wk$OppPts[i], Current_Wk$OppPts[i] - Current_Wk$Pts[i])
+  Current_Wk$ProjTotal[i] <- Current_Wk$Pts[i] + Current_Wk$OppPts[i]
+}
+Current_Wk <- Current_Wk %>% subset(Team == Winner)
+Current_Wk <- Current_Wk[,c("Winner","Opponent","Year","Pts","OppPts","ProjSpread","Spread","ProjTotal","Total")]
+
+rm(i,j,Off_stats,Def_stats,ncaa,Lines, url, tbl, lines_list)
+```
