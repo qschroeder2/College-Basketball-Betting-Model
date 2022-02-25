@@ -1,0 +1,79 @@
+library(shiny)
+library(shinydashboard)
+library(DT)
+library(symengine)
+
+# Inputs
+source("CBB-2022.R")
+
+# Define UI for application that can be used to pick games
+ui <- dashboardPage(skin = "yellow",
+
+    # Application title
+    dashboardHeader(title = "CBB Predictor"),
+
+    # Select Input for teams to matchup
+    dashboardSidebar(
+        sidebarMenu(
+            menuItem("Today's Games", tabName = "todaygames"),
+            menuItem("Matchup Projections", tabName = "proj")
+        )
+    ),
+        
+        # Table for Today's Games
+    dashboardBody(
+        tabItems(
+            tabItem(tabName = "todaygames",
+                    fluidRow(box(title = "Today's Games", width = 12,DT::dataTableOutput("today")))),
+            tabItem(tabName = "proj",
+                    box(title = "Team 1", width = 6,
+                        selectInput("year","Select Year", choices = unique(ncaa$Year), selected = "2022"),
+                        selectInput("name","Select School", choices = unique(ncaa$Team))),
+                    box(title = "Team 2", width = 6,
+                        selectInput("year2","Select Year", choices = unique(ncaa$Year), selected = "2022"),
+                        selectInput("name2","Select School", choices = unique(ncaa$Team))),
+                    box(title = "Projected Matchup", width = 12,
+                        DT::dataTableOutput("table")))
+        )
+    )
+)
+
+# Define server logic required to display table and created matchups
+server <- function(input, output, session) {
+    teams <- reactive({
+        team <- subset(ncaa, Year %in% input$year)
+        team <- select(team, "Team")
+    })
+    
+    observe({
+        updateSelectizeInput(session, "name", choices = teams(), selected = "Iowa")
+    })
+    
+    teams2 <- reactive({
+        team2 <- subset(ncaa, Year %in% input$year2)
+        team2 <- select(team2, "Team")
+    })
+    
+    observe({
+        updateSelectizeInput(session, "name2", choices = teams2(), selected = "Purdue")
+    })
+    
+    cbb_reactive <- reactive({
+        temp <- ncaa %>% dplyr::filter((Team == input$name & Year == input$year) | (Team == input$name2 & Year == input$year2))
+        if (temp[1,1] == input$name & temp[1,2] == input$year) {temp} else {dplyr::arrange(temp, desc(Team))}
+    })
+
+    output$table <- DT::renderDataTable({
+        DT::datatable(matchup_proj(cbb_reactive()), options = list(dom = 't', columnDefs = 
+                        list(list(className = 'dt-center', targets = 0:4))),rownames = FALSE)
+    })
+    
+    output$today <- DT::renderDataTable({
+        Current_Wk$ProjSpread <- round(Current_Wk$ProjSpread, 2)
+        DT::datatable(Current_Wk, options = list(lengthMenu = c(50, 75, 100), pageLength = 50,
+                        columnDefs = list(list(className = 'dt-center', targets = 0:8))),rownames = FALSE)
+    })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
